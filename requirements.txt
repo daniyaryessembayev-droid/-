@@ -1,4 +1,5 @@
 aiogram
 pandas
 openpyxl
-google-genai
+google-gena
+aiohttp
