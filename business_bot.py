@@ -1,5 +1,6 @@
 import asyncio
 import os
+from aiohttp import web          
 import pandas as pd
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -62,7 +63,18 @@ async def handle_excel(message: types.Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка при обработке файла: {e}")
 
+async def handle(request):
+    return web.Response(text="OK")
+
 async def main():
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
