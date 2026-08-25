@@ -1,5 +1,5 @@
+google-generativeai
 aiogram
 pandas
 openpyxl
-google-genai
 aiohttp
