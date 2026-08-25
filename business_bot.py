@@ -1,16 +1,17 @@
 import asyncio
 import os
-from aiohttp import web          
+import io
 import pandas as pd
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from google import genai
 
-# Вставьте ваши ключи
+# Токены и ключи
 BOT_TOKEN = "8358402574:AAGsZ-8M56rZ4bSyxBRCezdohQishgmx9LU"
-GEMINI_KEY = "AIzaSyCYmLyTrizoxurkfrrm_4sR06SySPDN2KQ"
+GEMINI_KEY = "AiZaSyCYmLyTrizoxurkfrrm_4sR06SySPDN2KQ"
 
 ai_client = genai.Client(api_key=GEMINI_KEY)
 bot = Bot(token=BOT_TOKEN)
@@ -20,46 +21,90 @@ class Form(StatesGroup):
     waiting_for_salary_data = State()
     waiting_for_naming_data = State()
 
+# Системные инструкции по законодательству Казахстана
+KZ_TAX_RULES = """
+Ты — профессиональный бухгалтер и финансовый аналитик по законодательству Республики Казахстан (РК).
+При расчете или анализе зарплат/доходов ИП всегда опирайся на следующие стандартные ставки налогов и взносов РК:
+
+1. Обязательные пенсионные взносы (ОПВ): 10% от начисленного дохода.
+2. Индивидуальный подоходный налог (ИПН): 10% от облагаемого дохода (Начисленный доход - ОПВ - Стандартный вычет 14 МРП).
+3. Социальные отчисления (СО): 3.5% от дохода (от 1 МЗП до 7 МЗП).
+4. Взносы на ОСМС (ВОСМС с работника): 2% от дохода (максимум с 10 МЗП).
+5. Отчисления на ОСМС (ООСМС от работодателя): 3% от дохода.
+6. Налог по форме 910 (упрощенка для ИП): 3% от общего дохода (1.5% ИПН + 1.5% СН).
+
+Если в документе представлена неструктурированная таблица, ведомость или отчёт (например, Зарплата к форме 910), распарси данные по людям, датам и суммам, приведи вычисления в порядок, рассчитай все необходимые налоги/проценты и составь понятную сводку.
+"""
+
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message):
     await message.answer(
-        "👋 Привет! Я бизнес-бот.\n\n"
-        "• Отправьте мне **Excel-файл (.xlsx)**, и я передам его на анализ в Gemini.\n"
-        "• Или отправьте текстовый запрос для расчета / нейминга.",
-        parse_mode="Markdown"
+        "👋 Привет! Я ваш бизнес-бот и бухгалтер-помощник по законодательству РК.\n\n"
+        "📊 Отправьте мне Excel/CSV файл (даже со сложной шапкой или неструктурированными данными), "
+        "и я очищу данные, рассчитаю налоги, ОПВ, СО, ОСМС и дам подробный финансовый анализ."
     )
 
-# Обработка Excel файлов
 @dp.message(F.document)
 async def handle_excel(message: types.Message):
-    file_name = message.document.file_name
-    if not file_name.endswith(('.xlsx', '.xls', '.csv')):
-        await message.answer("❌ Пожалуйста, отправьте файл формата .xlsx, .xls или .csv")
+    document = message.document
+    file_name = document.file_name.lower()
+    
+    if not (file_name.endswith('.xlsx') or file_name.endswith('.xls') or file_name.endswith('.csv')):
+        await message.answer("⚠️ Пожалуйста, отправьте файл формата Excel (.xlsx, .xls) или CSV.")
         return
 
-    await message.answer("📥 Скачиваю и анализирую таблицу...")
-    
+    await message.answer("⏳ Обрабатываю и очищаю файл, рассчитываю налоги РК...")
+
     try:
-        file_info = await bot.get_file(message.document.file_id)
+        file_info = await bot.get_file(document.file_id)
         downloaded_file = await bot.download_file(file_info.file_path)
         
-        # Чтение таблицы через pandas
+        # Обработка неструктурированных/непонятных для стандартного парсера таблиц
         if file_name.endswith('.csv'):
             df = pd.read_csv(downloaded_file)
         else:
-            df = pd.read_excel(downloaded_file)
-            
-        # Берем первые строки таблицы для анализа нейросетью
-        table_summary = df.head(50).to_string(index=False)
-        
-        prompt = f"Проанализируй данные из этой таблицы (показаны первые строки), сделай выводы, расчеты или дай рекомендации:\n\n{table_summary}"
-        
+            # Считываем все строки без автозаголовков, чтобы не потерять данные из сложной шапки
+            df = pd.read_excel(downloaded_file, header=None)
+
+        # Удаляем полностью пустые строки и столбцы
+        df = df.dropna(how='all').dropna(how='all', axis=1)
+
+        # Преобразуем таблицу в чистый форматированный текст без NaN
+        formatted_text_list = []
+        for row in df.values:
+            clean_row = [str(val).strip() for val in row if pd.notna(val) and str(val).strip() != 'nan']
+            if clean_row:
+                formatted_text_list.append(" | ".join(clean_row))
+
+        table_summary = "\n".join(formatted_text_list)
+
+        # Обрезаем при превышении размера лимита
+        if len(table_summary) > 5000:
+            table_summary = table_summary[:5000] + "\n...[данные сокращены]"
+
+        prompt = (
+            f"{KZ_TAX_RULES}\n\n"
+            f"Вот данные из полученного документа/таблицы (файл: {document.file_name}):\n\n"
+            f"{table_summary}\n\n"
+            "Задание:\n"
+            "1. Распознай структуру данных, даже если шапка таблицы была нестандартной.\n"
+            "2. Сделай подробный расчет налогов, отчислений (ОПВ, СО, ВОСМС, ИПН) и итоговых сумм по законодательству РК.\n"
+            "3. Выведи итоговые выводы, таблицы и рекомендации понятным языком."
+        )
+
         response = ai_client.models.generate_content(
             model="gemini-2.5-flash",
-            contents=prompt,
+            contents=prompt
         )
-        
-        await message.answer(f"📊 **Результат анализа таблицы:**\n\n{response.text}", parse_mode="Markdown")
+
+        # Отправляем ответ пользователю
+        text_response = response.text
+        if len(text_response) > 4000:
+            for x in range(0, len(text_response), 4000):
+                await message.answer(text_response[x:x+4000])
+        else:
+            await message.answer(text_response)
+
     except Exception as e:
         await message.answer(f"❌ Ошибка при обработке файла: {e}")
 
