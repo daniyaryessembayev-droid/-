@@ -11,7 +11,7 @@ from google import genai
 
 # Токены и ключи
 BOT_TOKEN = "8358402574:AAGsZ-8M56rZ4bSyxBRCezdohQishgmx9LU"
-GEMINI_KEY = "AiZaSyCYmLyTrizoxurkfrrm_4sR06SySPDN2KQ"
+GEMINI_KEY = "AIzaSyCyMLyTrizoxurkfrrm_4sR06SySPDN2KQ"
 
 ai_client = genai.Client(api_key=GEMINI_KEY)
 bot = Bot(token=BOT_TOKEN)
@@ -59,17 +59,13 @@ async def handle_excel(message: types.Message):
         file_info = await bot.get_file(document.file_id)
         downloaded_file = await bot.download_file(file_info.file_path)
         
-        # Обработка неструктурированных/непонятных для стандартного парсера таблиц
         if file_name.endswith('.csv'):
             df = pd.read_csv(downloaded_file)
         else:
-            # Считываем все строки без автозаголовков, чтобы не потерять данные из сложной шапки
             df = pd.read_excel(downloaded_file, header=None)
 
-        # Удаляем полностью пустые строки и столбцы
         df = df.dropna(how='all').dropna(how='all', axis=1)
 
-        # Преобразуем таблицу в чистый форматированный текст без NaN
         formatted_text_list = []
         for row in df.values:
             clean_row = [str(val).strip() for val in row if pd.notna(val) and str(val).strip() != 'nan']
@@ -78,7 +74,6 @@ async def handle_excel(message: types.Message):
 
         table_summary = "\n".join(formatted_text_list)
 
-        # Обрезаем при превышении размера лимита
         if len(table_summary) > 5000:
             table_summary = table_summary[:5000] + "\n...[данные сокращены]"
 
@@ -93,11 +88,10 @@ async def handle_excel(message: types.Message):
         )
 
         response = ai_client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
 
-        # Отправляем ответ пользователю
         text_response = response.text
         if len(text_response) > 4000:
             for x in range(0, len(text_response), 4000):
