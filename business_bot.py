@@ -7,13 +7,16 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from google import genai
+import google.generativeai as genai
 
 # Токены и ключи
 BOT_TOKEN = "8358402574:AAGsZ-8M56rZ4bSyxBRCezdohQishgmx9LU"
 GEMINI_KEY = "AIzaSyCyMLyTrizoxurkfrrm_4sR06SySPDN2KQ"
 
-ai_client = genai.Client(api_key=GEMINI_KEY)
+# Настройка подключения к Gemini API
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -21,7 +24,7 @@ class Form(StatesGroup):
     waiting_for_salary_data = State()
     waiting_for_naming_data = State()
 
-# Системные инструкции по законодательству Казахстана
+# Налоговые правила по законодательству Казахстана
 KZ_TAX_RULES = """
 Ты — профессиональный бухгалтер и финансовый аналитик по законодательству Республики Казахстан (РК).
 При расчете или анализе зарплат/доходов ИП всегда опирайся на следующие стандартные ставки налогов и взносов РК:
@@ -59,6 +62,7 @@ async def handle_excel(message: types.Message):
         file_info = await bot.get_file(document.file_id)
         downloaded_file = await bot.download_file(file_info.file_path)
         
+        # Считывание и очистка файла от пустых объединений
         if file_name.endswith('.csv'):
             df = pd.read_csv(downloaded_file)
         else:
@@ -87,10 +91,7 @@ async def handle_excel(message: types.Message):
             "3. Выведи итоговые выводы, таблицы и рекомендации понятным языком."
         )
 
-        response = ai_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
+        response = model.generate_content(prompt)
 
         text_response = response.text
         if len(text_response) > 4000:
