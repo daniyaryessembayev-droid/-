@@ -8,14 +8,13 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from google import genai
-# Токены и ключи
+
+# Токен Telegram-бота и API-ключ Gemini из переменных Render
 BOT_TOKEN = "8358402574:AAGsZ-8M56rZ4bSyxBRCezdohQishgmx9LU"
-GEMINI_KEY = "AIzaSyCyMLyTrizoxurkfrrm_4sR06SySPDN2KQ"
+GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
-# Настройка подключения к Gemini API
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
-
+# Инициализация клиента Gemini
+ai_client = genai.Client(api_key=GEMINI_KEY)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
@@ -23,7 +22,7 @@ class Form(StatesGroup):
     waiting_for_salary_data = State()
     waiting_for_naming_data = State()
 
-# Налоговые правила по законодательству Казахстана
+# Налоговые правила и ставки по законодательству РК
 KZ_TAX_RULES = """
 Ты — профессиональный бухгалтер и финансовый аналитик по законодательству Республики Казахстан (РК).
 При расчете или анализе зарплат/доходов ИП всегда опирайся на следующие стандартные ставки налогов и взносов РК:
@@ -42,8 +41,7 @@ KZ_TAX_RULES = """
 async def start_cmd(message: types.Message):
     await message.answer(
         "👋 Привет! Я ваш бизнес-бот и бухгалтер-помощник по законодательству РК.\n\n"
-        "📊 Отправьте мне Excel/CSV файл (даже со сложной шапкой или неструктурированными данными), "
-        "и я очищу данные, рассчитаю налоги, ОПВ, СО, ОСМС и дам подробный финансовый анализ."
+        "📊 Отправьте мне Excel/CSV файл, и я очищу данные, рассчитаю налоги, ОПВ, СО, ОСМС и дам подробный финансовый анализ."
     )
 
 @dp.message(F.document)
@@ -55,18 +53,18 @@ async def handle_excel(message: types.Message):
         await message.answer("⚠️ Пожалуйста, отправьте файл формата Excel (.xlsx, .xls) или CSV.")
         return
 
-    await message.answer("⏳ Обрабатываю и очищаю файл, рассчитываю налоги РК...")
+    await message.answer("⏳ Обрабатываю файл и рассчитываю налоги РК...")
 
     try:
         file_info = await bot.get_file(document.file_id)
         downloaded_file = await bot.download_file(file_info.file_path)
         
-        # Считывание и очистка файла от пустых объединений
         if file_name.endswith('.csv'):
             df = pd.read_csv(downloaded_file)
         else:
             df = pd.read_excel(downloaded_file, header=None)
 
+        # Очистка пустых строк и столбцов
         df = df.dropna(how='all').dropna(how='all', axis=1)
 
         formatted_text_list = []
@@ -85,12 +83,16 @@ async def handle_excel(message: types.Message):
             f"Вот данные из полученного документа/таблицы (файл: {document.file_name}):\n\n"
             f"{table_summary}\n\n"
             "Задание:\n"
-            "1. Распознай структуру данных, даже если шапка таблицы была нестандартной.\n"
-            "2. Сделай подробный расчет налогов, отчислений (ОПВ, СО, ВОСМС, ИПН) и итоговых сумм по законодательству РК.\n"
-            "3. Выведи итоговые выводы, таблицы и рекомендации понятным языком."
+            "1. Распознай структуру данных.\n"
+            "2. Сделай подробный расчет налогов и отчислений (ОПВ, СО, ВОСМС, ИПН) по законодательству РК.\n"
+            "3. Выведи итоговые выводы и таблицы понятным языком."
         )
 
-        response = model.generate_content(prompt)
+        # Генерация ответа через современный SDK Gemini 2.0
+        response = ai_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
 
         text_response = response.text
         if len(text_response) > 4000:
@@ -102,6 +104,7 @@ async def handle_excel(message: types.Message):
     except Exception as e:
         await message.answer(f"❌ Ошибка при обработке файла: {e}")
 
+# Простой веб-сервер для поддержки активности веб-сервиса на Render
 async def handle(request):
     return web.Response(text="OK")
 
