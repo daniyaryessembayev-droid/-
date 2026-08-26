@@ -87,19 +87,18 @@ async def handle_excel(message: types.Message):
             "2. Сделай подробный расчет налогов и отчислений (ОПВ, СО, ВОСМС, ИПН) по законодательству РК.\n"
             "3. Выведи итоговые выводы и таблицы понятным языком."
         )
-
-        # Генерация ответа через современный SDK Gemini 2.0
+# Генерация ответа через Gemini API
         response = ai_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt
         )
 
         text_response = response.text
         if len(text_response) > 4000:
             for x in range(0, len(text_response), 4000):
-                await message.answer(text_response[x:x+4000])
+                await message.answer(text_response[x:x+4000], parse_mode=None)
         else:
-            await message.answer(text_response)
+            await message.answer(text_response, parse_mode=None)
 
     except Exception as e:
         await message.answer(f"❌ Ошибка при обработке файла: {e}")
@@ -115,9 +114,15 @@ async def main():
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
 
-    await dp.start_polling(bot)
+    await bot.delete_webhook(drop_pending_updates=True)
+
+    await asyncio.gather(
+        site.start(),
+        dp.start_polling(bot)
+    )
 
 if __name__ == "__main__":
+    asyncio.run(main())
+       
     asyncio.run(main())
