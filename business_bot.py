@@ -7,8 +7,7 @@ from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-import google.generativeai as genai
-
+from google import genai
 # Токены и ключи
 BOT_TOKEN = "8358402574:AAGsZ-8M56rZ4bSyxBRCezdohQishgmx9LU"
 GEMINI_KEY = "AIzaSyCyMLyTrizoxurkfrrm_4sR06SySPDN2KQ"
