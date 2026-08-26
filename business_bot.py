@@ -88,10 +88,10 @@ async def handle_excel(message: types.Message):
             "3. Выведи итоговые выводы и таблицы понятным языком."
         )
 # Генерация ответа через Gemini API
-        response = ai_client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt
-        )
+     response = ai_client.models.generate_content(
+    model="gemini-2.5-flash",
+    contents=prompt
+)
 
         text_response = response.text
         if len(text_response) > 4000:
